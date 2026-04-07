@@ -71,25 +71,7 @@ jobs:
         sed -i "s/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/g" arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         wget https://github.com/ego-taboo/LXC-DOCKER-KernelSU_Action/releases/download/1.0.0/clangfix2.sh
         chmod u+x clangfix2.sh
-        ./clangfix2.sh
-
-    - name: 禁用32位兼容层（修复vdso32编译错误）
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        CONFIG_FILE="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
-        
-        # 追加配置到文件末尾
-        cat >> $CONFIG_FILE << 'EOF'
-
-# ====================
-# Disable 32-bit compatibility (fix vdso32 build error with LLVM IAS)
-# ====================
-CONFIG_COMPAT=n
-CONFIG_COMPAT_VDSO=n
-EOF
-        
-        echo "=== Config file now contains: ==="
-        grep -E "CONFIG_COMPAT|CONFIG_COMPAT_VDSO" $CONFIG_FILE || echo "Config added"
+        ./clangfix2.sh        
 
     - name: 配置 ksu
       if: env.ENABLE_KERNELSU == 'true'
@@ -100,11 +82,11 @@ EOF
     - name: 开启kvm
       if: env.ENABLE_KVM == 'true'
       run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace
-        echo "CONFIG_VIRTUALIZATION=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_KVM=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_VHOST_NET=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_VHOST_CROSS_ENDIAN_LEGACY=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+         cd $GITHUB_WORKSPACE/kernel_workspace
+         echo "CONFIG_VIRTUALIZATION=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+         echo "CONFIG_KVM=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+         echo "CONFIG_VHOST_NET=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+         echo "CONFIG_VHOST_CROSS_ENDIAN_LEGACY=y" >> android-kernel/arch/arm64/configs/${{ env.KERNEL_CONFIG }}
                
     - name: 设置ccache缓存
       uses: hendrikmuhs/ccache-action@v1.2
@@ -118,26 +100,11 @@ EOF
         export PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-zyc/bin:$PATH
         export KBUILD_BUILD_HOST=17
         export KBUILD_BUILD_USER=HyperPower
-        
-        # 生成配置
         make -s -j$(nproc --all) O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
-        
-        # 再次确保 COMPAT 被禁用（双重保险）
-        scripts/config --file out/.config --disable COMPAT
-        scripts/config --file out/.config --disable COMPAT_VDSO
-        
-        # 重新生成依赖
-        make O=out ARCH=arm64 olddefconfig
-        
-        # 验证配置
-        echo "=== Checking COMPAT config ==="
-        grep "CONFIG_COMPAT" out/.config || echo "COMPAT disabled successfully"
-        
-        # 开始编译
-        if [ ${{env.LLVM_CONFIG}} = y ]; then
-          make -j$(nproc --all) CC="ccache clang" CXX=clang++ O=out ARCH=arm64 CLANG_TRIPLE="aarch64-linux-gnu-" CROSS_COMPILE="aarch64-linux-gnu-" CROSS_COMPILE_ARM32="arm-linux-gnueabi-" LLVM=1 LLVM_IAS=1
+        if [ ${{env.LLVM_CONFIG}}=y ]; then
+        make -j$(nproc --all) CC="ccache clang" CXX=clang++ O=out ARCH=arm64 CLANG_TRIPLE="aarch64-linux-gnu-" CROSS_COMPILE="aarch64-linux-gnu-" CROSS_COMPILE_ARM32="arm-linux-gnueabi-" LLVM=1 LLVM_IAS=1
         else
-          make -j$(nproc --all) CC="ccache clang" CXX=clang++ O=out ARCH=arm64 CLANG_TRIPLE="aarch64-linux-gnu-" CROSS_COMPILE="aarch64-linux-gnu-" CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
+        make -j$(nproc --all) CC="ccache clang" CXX=clang++ O=out ARCH=arm64 CLANG_TRIPLE="aarch64-linux-gnu-" CROSS_COMPILE="aarch64-linux-gnu-" CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
         fi
                 
     - name: 准备打包内核
@@ -150,6 +117,7 @@ EOF
         cp android-kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
         rm -rf AnyKernel3/.git* AnyKernel3/README.md
         rm -rf AnyKernel3/ramdisk AnyKernel3/modules AnyKernel3/patch
+    
     
     - name: 打包并上传
       uses: actions/upload-artifact@v4
